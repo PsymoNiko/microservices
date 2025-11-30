@@ -4,11 +4,11 @@ Basement Microservice - FastAPI Application
 Provides file upload and base model functionality.
 """
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-import os
+
 import uuid
 from PIL import Image
 from io import BytesIO

@@ -1,7 +1,7 @@
 import logging
 from locust import HttpUser, task, between, SequentialTaskSet
 import random
-import json
+
 
 # Configure loggers
 logging.basicConfig(level=logging.INFO)
