@@ -20,9 +20,6 @@ services:
   # Django service
   django:
     container_name: "django-chat-backend"
-    dns:
-      - 10.202.10.202
-      - 10.202.10.102
     build: .
 #      context: .
 #      dockerfile: Dockerfile.dev
