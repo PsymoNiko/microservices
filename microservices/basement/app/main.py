@@ -6,7 +6,7 @@ Provides file upload and base model functionality.
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 
 import uuid
