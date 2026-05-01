@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Vercel Workflows – Moveable & Interactive Graph</title>
+    <style>
+        * {
+            user-select: none;
+        }
+        body {
+            background: #eef2f5;
+            font-family: 'Segoe UI', system-ui, -apple-system, 'Inter', sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+        .graph-container {
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+            width: 100vw;
+            height: 90vh;
+            max-width: 1400px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+        .toolbar {
+            padding: 12px 20px;
+            background: #ffffffdd;
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            z-index: 10;
+        }
+        button {
+            background: #f1f5f9;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-weight: 500;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.1s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        button:hover {
+            background: #e2e8f0;
+        }
+        .legend {
+            display: flex;
+            gap: 16px;
+            margin-left: auto;
+            font-size: 0.7rem;
+            background: #f8fafc;
+            padding: 4px 12px;
+            border-radius: 40px;
+        }
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .color-badge {
+            width: 12px;
+            height: 12px;
+            border-radius: 4px;
+        }
+        canvas {
+            display: block;
+            background: #ffffff;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        .info {
+            position: absolute;
+            bottom: 12px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            color: white;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        @media (max-width: 700px) {
+            .toolbar { padding: 8px 12px; }
+            .legend { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="graph-container">
+    <div class="toolbar">
+        <button id="resetViewBtn">🔄 Reset View</button>
+        <button id="resetLayoutBtn">📌 Reset Node Layout</button>
+        <div class="legend">
+            <span><div class="color-badge" style="background:#d4f1f9; border:1px solid #0077b6;"></div> Release</span>
+            <span><div class="color-badge" style="background:#ffe6e6; border:1px solid #c2410c;"></div> CI</span>
+            <span><div class="color-badge" style="background:#e6f4ea; border:1px solid #2e7d32;"></div> Cron</span>
+            <span><div class="color-badge" style="background:#fef9e3; border:1px solid #b45309;"></div> Maintenance</span>
+            <span><div class="color-badge" style="background:#f3e8ff; border:1px solid #7c3aed;"></div> Utility</span>
+            <span><div class="color-badge" style="background:#eef2ff; border:1px solid #334155;"></div> Trigger</span>
+        </div>
+        <span style="font-size:12px; color:#475569;"><i class="fas fa-arrows-alt"></i> Drag nodes | Drag background → pan | Wheel → zoom</span>
+    </div>
+    <canvas id="graphCanvas"></canvas>
+    <div class="info">✨ Moveable workflow graph – nodes can be repositioned anywhere</div>
+</div>
+
+<script>
+    (function(){
+        const canvas = document.getElementById('graphCanvas');
+        let ctx = canvas.getContext('2d');
+
+        // ------------- Node data (initial positions) -------------
+        const nodes = [
+            // triggers
+            { id: "pushMain", label: "push: main", x: 120, y: 100, group: "trigger" },
+            { id: "pr", label: "pull_request", x: 120, y: 200, group: "trigger" },
+            { id: "schedule", label: "cron schedule", x: 120, y: 300, group: "trigger" },
+            { id: "dispatch", label: "workflow_dispatch", x: 120, y: 400, group: "trigger" },
+            // release
+            { id: "release", label: "release.yml", x: 340, y: 70, group: "release" },
+            { id: "releaseCrates", label: "release-crates.yml", x: 340, y: 150, group: "release" },
+            { id: "releasePython", label: "release-python-package.yml", x: 340, y: 230, group: "release" },
+            { id: "rollback", label: "rollback-latest-tag.yml", x: 340, y: 310, group: "release" },
+            // CI
+            { id: "test", label: "test.yml\n(unit+e2e)", x: 580, y: 90, group: "ci" },
+            { id: "lint", label: "test-lint.yml", x: 580, y: 180, group: "ci" },
+            { id: "pythonTests", label: "test-python-packages.yml", x: 580, y: 270, group: "ci" },
+            { id: "evals", label: "cli-evals.yml", x: 580, y: 360, group: "ci" },
+            // cron
+            { id: "nextCanary", label: "cron-update-next-canary", x: 840, y: 70, group: "cron" },
+            { id: "nextLatest", label: "cron-update-next-latest", x: 840, y: 150, group: "cron" },
+            { id: "gatsby", label: "cron-update-gatsby-fixtures", x: 840, y: 230, group: "cron" },
+            { id: "turbo", label: "cron-update-turbo", x: 840, y: 310, group: "cron" },
+            // maintenance
+            { id: "agentics", label: "agentics-maintenance.yml", x: 1070, y: 70, group: "maintenance" },
+            { id: "ciDoctor", label: "ci-doctor.lock.yml", x: 1070, y: 170, group: "maintenance" },
+            { id: "discussions", label: "discussions-auto-close.yml", x: 1070, y: 270, group: "maintenance" },
+            // other / utility
+            { id: "comment", label: "comment-cli-tarball.yml", x: 340, y: 470, group: "other" },
+            { id: "prebuild", label: "faster-template-prebuild", x: 340, y: 560, group: "other" },
+            { id: "updateRemix", label: "update-remix-run-dev.yml", x: 580, y: 480, group: "other" },
+            { id: "updateSandbox", label: "update-sandbox.yml", x: 580, y: 570, group: "other" },
+            { id: "summary", label: "summary (release)", x: 460, y: 680, group: "other" }
+        ];
+
+        // Edges (connections)
+        const edges = [
+            { from: "pushMain", to: "release" }, { from: "pushMain", to: "releaseCrates" }, { from: "pushMain", to: "prebuild" },
+            { from: "pr", to: "test" }, { from: "pr", to: "lint" }, { from: "pr", to: "pythonTests" }, { from: "pr", to: "evals" },
+            { from: "schedule", to: "nextCanary" }, { from: "schedule", to: "nextLatest" }, { from: "schedule", to: "gatsby" }, { from: "schedule", to: "turbo" },
+            { from: "dispatch", to: "releasePython" }, { from: "dispatch", to: "rollback" }, { from: "dispatch", to: "updateRemix" },
+            { from: "dispatch", to: "updateSandbox" }, { from: "dispatch", to: "evals" },
+            { from: "test", to: "ciDoctor" }, { from: "release", to: "summary" }
+        ];
+
+        // ----- Group styling -----
+        const groupStyles = {
+            trigger: { bg: "#eef2ff", border: "#334155", text: "#1e293b" },
+            release: { bg: "#d4f1f9", border: "#0077b6", text: "#0c4a6e" },
+            ci: { bg: "#ffe6e6", border: "#c2410c", text: "#7f1a1a" },
+            cron: { bg: "#e6f4ea", border: "#2e7d32", text: "#14532d" },
+            maintenance: { bg: "#fef9e3", border: "#b45309", text: "#78350f" },
+            other: { bg: "#f3e8ff", border: "#7c3aed", text: "#4c1d95" }
+        };
+
+        // ---------- Pan & Zoom state ----------
+        let offsetX = 0, offsetY = 0;   // canvas translation
+        let scale = 1.0;
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+        
+        // Dragging node state
+        let draggedNode = null;
+        let dragOffsetX = 0, dragOffsetY = 0;
+
+        // Resize canvas to match container
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            drawGraph();
+        }
+        window.addEventListener('resize', () => resizeCanvas());
+
+        // Helper: draw rounded rect
+        function roundedRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            return this;
+        }
+
+        function drawArrow(ctx, from, to, transform) {
+            // transform coordinates from world to screen
+            const fromX = from.x * scale + offsetX;
+            const fromY = from.y * scale + offsetY;
+            const toX = to.x * scale + offsetX;
+            const toY = to.y * scale + offsetY;
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            const startX = fromX + Math.cos(angle) * 35;
+            const startY = fromY + Math.sin(angle) * 35;
+            const endX = toX - Math.cos(angle) * 35;
+            const endY = toY - Math.sin(angle) * 35;
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = "#6c7a91";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            const arrowSize = 8;
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI/6), endY - arrowSize * Math.sin(angle - Math.PI/6));
+            ctx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI/6), endY - arrowSize * Math.sin(angle + Math.PI/6));
+            ctx.fillStyle = "#4b5a73";
+            ctx.fill();
+        }
+
+        function drawNode(ctx, node) {
+            const style = groupStyles[node.group] || groupStyles.other;
+            const w = 170;
+            const h = 58;
+            const xWorld = node.x - w/2;
+            const yWorld = node.y - h/2;
+            const screenX = xWorld * scale + offsetX;
+            const screenY = yWorld * scale + offsetY;
+            const screenW = w * scale;
+            const screenH = h * scale;
+            if (screenX + screenW < 0 || screenX > canvas.width || screenY + screenH < 0 || screenY > canvas.height) return;
+            ctx.save();
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = "rgba(0,0,0,0.05)";
+            roundedRect(ctx, screenX, screenY, screenW, screenH, 10 * scale);
+            ctx.fillStyle = style.bg;
+            ctx.fill();
+            ctx.strokeStyle = style.border;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.font = `${Math.max(11, 12 * scale)}px "Segoe UI", system-ui`;
+            ctx.fillStyle = style.text;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const lines = node.label.split('\n');
+            const centerX = (node.x * scale + offsetX);
+            const centerY = (node.y * scale + offsetY);
+            if (lines.length === 1) {
+                ctx.fillText(lines[0], centerX, centerY);
+            } else {
+                const lineHeight = 16 * scale;
+                const startY = centerY - ((lines.length-1) * lineHeight/2);
+                for (let i=0; i<lines.length; i++) {
+                    ctx.fillText(lines[i], centerX, startY + i * lineHeight);
+                }
+            }
+            ctx.restore();
+        }
+
+        function drawGraph() {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            // draw edges
+            for (let edge of edges) {
+                const fromNode = nodes.find(n => n.id === edge.from);
+                const toNode = nodes.find(n => n.id === edge.to);
+                if (fromNode && toNode) {
+                    drawArrow(ctx, fromNode, toNode);
+                }
+            }
+            // draw nodes
+            for (let node of nodes) {
+                drawNode(ctx, node);
+            }
+            ctx.restore();
+        }
+
+        // Convert screen coordinates to world coordinates
+        function screenToWorld(screenX, screenY) {
+            return { x: (screenX - offsetX) / scale, y: (screenY - offsetY) / scale };
+        }
+
+        // Mouse handlers for pan & node drag
+        function onMouseDown(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseScreenX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseScreenY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            const worldPt = screenToWorld(mouseScreenX, mouseScreenY);
+            // Check if we hit a node
+            let hitNode = null;
+            for (let node of nodes) {
+                const halfW = 85, halfH = 29;
+                const left = node.x - halfW;
+                const right = node.x + halfW;
+                const top = node.y - halfH;
+                const bottom = node.y + halfH;
+                if (worldPt.x >= left && worldPt.x <= right && worldPt.y >= top && worldPt.y <= bottom) {
+                    hitNode = node;
+                    break;
+                }
+            }
+            if (hitNode) {
+                draggedNode = hitNode;
+                dragOffsetX = hitNode.x - worldPt.x;
+                dragOffsetY = hitNode.y - worldPt.y;
+                canvas.style.cursor = "grabbing";
+                e.preventDefault();
+                return;
+            }
+            // else start panning
+            isPanning = true;
+            panStart.x = mouseScreenX;
+            panStart.y = mouseScreenY;
+            canvas.style.cursor = "grabbing";
+        }
+
+        function onMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseScreenX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseScreenY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            if (draggedNode) {
+                const worldNow = screenToWorld(mouseScreenX, mouseScreenY);
+                draggedNode.x = worldNow.x + dragOffsetX;
+                draggedNode.y = worldNow.y + dragOffsetY;
+                drawGraph();
+                return;
+            }
+            if (isPanning) {
+                const dx = mouseScreenX - panStart.x;
+                const dy = mouseScreenY - panStart.y;
+                offsetX += dx;
+                offsetY += dy;
+                panStart.x = mouseScreenX;
+                panStart.y = mouseScreenY;
+                drawGraph();
+            }
+        }
+
+        function onMouseUp(e) {
+            if (draggedNode) {
+                draggedNode = null;
+                canvas.style.cursor = "grab";
+                drawGraph();
+            }
+            if (isPanning) {
+                isPanning = false;
+                canvas.style.cursor = "grab";
+            }
+        }
+
+        function onWheel(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.min(2.5, Math.max(0.4, scale * delta));
+            // zoom around mouse point
+            const worldBefore = screenToWorld(mouseX, mouseY);
+            scale = newScale;
+            const worldAfter = screenToWorld(mouseX, mouseY);
+            offsetX += (worldAfter.x - worldBefore.x) * scale;
+            offsetY += (worldAfter.y - worldBefore.y) * scale;
+            drawGraph();
+        }
+
+        function resetView() {
+            offsetX = 0;
+            offsetY = 0;
+            scale = 1.0;
+            drawGraph();
+        }
+
+        function resetLayout() {
+            // restore initial positions (from initial nodes array)
+            const initialPositions = {
+                pushMain: {x:120,y:100}, pr:{x:120,y:200}, schedule:{x:120,y:300}, dispatch:{x:120,y:400},
+                release:{x:340,y:70}, releaseCrates:{x:340,y:150}, releasePython:{x:340,y:230}, rollback:{x:340,y:310},
+                test:{x:580,y:90}, lint:{x:580,y:180}, pythonTests:{x:580,y:270}, evals:{x:580,y:360},
+                nextCanary:{x:840,y:70}, nextLatest:{x:840,y:150}, gatsby:{x:840,y:230}, turbo:{x:840,y:310},
+                agentics:{x:1070,y:70}, ciDoctor:{x:1070,y:170}, discussions:{x:1070,y:270},
+                comment:{x:340,y:470}, prebuild:{x:340,y:560}, updateRemix:{x:580,y:480}, updateSandbox:{x:580,y:570},
+                summary:{x:460,y:680}
+            };
+            for (let node of nodes) {
+                if (initialPositions[node.id]) {
+                    node.x = initialPositions[node.id].x;
+                    node.y = initialPositions[node.id].y;
+                }
+            }
+            drawGraph();
+        }
+
+        // attach events
+        function initEvents() {
+            canvas.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+            canvas.addEventListener('wheel', onWheel, { passive: false });
+            canvas.style.cursor = "grab";
+            document.getElementById('resetViewBtn').addEventListener('click', resetView);
+            document.getElementById('resetLayoutBtn').addEventListener('click', resetLayout);
+        }
+
+        function init() {
+            resizeCanvas();
+            initEvents();
+            drawGraph();
+        }
+        init();
+    })();
+</script>
+</body>
+</html>
+

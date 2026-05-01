@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Vercel Workflows – Drawn Graph (Canvas)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #f1f5f9;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1rem;
+        }
+
+        /* full width canvas container */
+        .canvas-container {
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.15);
+            padding: 1rem;
+            margin-bottom: 2rem;
+            width: 100%;
+            max-width: 1400px;
+            overflow-x: auto;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            width: 100%;
+            height: auto;
+            cursor: pointer;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            background: #f8fafc;
+            padding: 0.8rem 1.5rem;
+            border-radius: 60px;
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 20px;
+        }
+        h2 {
+            font-size: 1.6rem;
+            margin: 1rem 0 0.5rem;
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .description {
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto 1rem;
+            color: #334155;
+        }
+        .footer-note {
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            text-align: center;
+            color: #5b6e8c;
+        }
+        @media (max-width: 800px) {
+            .canvas-container { padding: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+<h2>📐 Vercel GitHub Actions – Live Drawn Workflow Graph</h2>
+<div class="description">
+    Each node is drawn dynamically via Canvas API. Edges represent triggers or dependencies. 
+    Hover for details (tooltips) – fully vector drawn, no static image.
+</div>
+
+<div class="canvas-container">
+    <canvas id="workflowCanvas" width="1200" height="800" style="width:100%; height:auto; max-width:1200px; aspect-ratio:1200/800"></canvas>
+</div>
+
+<div class="legend">
+    <span><div class="legend-color" style="background: #d4f1f9; border: 2px solid #0077b6;"></div> Release & Publication</span>
+    <span><div class="legend-color" style="background: #ffe6e6; border: 2px solid #c2410c;"></div> CI & Testing</span>
+    <span><div class="legend-color" style="background: #e6f4ea; border: 2px solid #2e7d32;"></div> Cron Automation</span>
+    <span><div class="legend-color" style="background: #fef9e3; border: 2px solid #b45309;"></div> Maintenance</span>
+    <span><div class="legend-color" style="background: #f3e8ff; border: 2px solid #7c3aed;"></div> Utility / Other</span>
+    <span><div class="legend-color" style="background: #eef2ff; border: 2px solid #334155;"></div> Triggers</span>
+</div>
+<div class="footer-note">
+    <i class="fas fa-pen-ruler"></i> Graph drawn dynamically with JavaScript Canvas – nodes & edges positioned manually for clarity.
+</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById('workflowCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set explicit dimensions for consistent rendering (CSS scales but canvas resolution fixed)
+        canvas.width = 1200;
+        canvas.height = 800;
+
+        // ----- Node definitions -----
+        // Each node: id, label, x, y, colorGroup
+        const nodes = [
+            // Triggers (gray-blue)
+            { id: "pushMain", label: "push: main", x: 90, y: 70, group: "trigger" },
+            { id: "pr", label: "pull_request", x: 90, y: 170, group: "trigger" },
+            { id: "schedule", label: "cron schedule", x: 90, y: 270, group: "trigger" },
+            { id: "dispatch", label: "workflow_dispatch", x: 90, y: 370, group: "trigger" },
+
+            // Release group (blue)
+            { id: "release", label: "release.yml", x: 300, y: 50, group: "release" },
+            { id: "releaseCrates", label: "release-crates.yml", x: 300, y: 130, group: "release" },
+            { id: "releasePython", label: "release-python-package.yml", x: 300, y: 210, group: "release" },
+            { id: "rollback", label: "rollback-latest-tag.yml", x: 300, y: 290, group: "release" },
+
+            // CI group (red/pink)
+            { id: "test", label: "test.yml\n(unit+e2e)", x: 560, y: 70, group: "ci" },
+            { id: "lint", label: "test-lint.yml", x: 560, y: 160, group: "ci" },
+            { id: "pythonTests", label: "test-python-packages.yml", x: 560, y: 250, group: "ci" },
+            { id: "evals", label: "cli-evals.yml", x: 560, y: 340, group: "ci" },
+
+            // Cron automation (green)
+            { id: "nextCanary", label: "cron-update-next-canary", x: 820, y: 60, group: "cron" },
+            { id: "nextLatest", label: "cron-update-next-latest", x: 820, y: 140, group: "cron" },
+            { id: "gatsby", label: "cron-update-gatsby-fixtures", x: 820, y: 220, group: "cron" },
+            { id: "turbo", label: "cron-update-turbo", x: 820, y: 300, group: "cron" },
+
+            // Maintenance (orange)
+            { id: "agentics", label: "agentics-maintenance.yml", x: 1050, y: 60, group: "maintenance" },
+            { id: "ciDoctor", label: "ci-doctor.lock.yml", x: 1050, y: 160, group: "maintenance" },
+            { id: "discussions", label: "discussions-auto-close.yml", x: 1050, y: 260, group: "maintenance" },
+
+            // Other / utility (purple)
+            { id: "comment", label: "comment-cli-tarball.yml", x: 300, y: 460, group: "other" },
+            { id: "prebuild", label: "faster-template-prebuild", x: 300, y: 550, group: "other" },
+            { id: "updateRemix", label: "update-remix-run-dev.yml", x: 560, y: 470, group: "other" },
+            { id: "updateSandbox", label: "update-sandbox.yml", x: 560, y: 560, group: "other" },
+            { id: "summary", label: "summary (release)", x: 470, y: 670, group: "other" }  // extra note
+        ];
+
+        // Edge list: from -> to
+        const edges = [
+            // Triggers to workflows
+            { from: "pushMain", to: "release" },
+            { from: "pushMain", to: "releaseCrates" },
+            { from: "pushMain", to: "prebuild" },
+            { from: "pr", to: "test" },
+            { from: "pr", to: "lint" },
+            { from: "pr", to: "pythonTests" },
+            { from: "pr", to: "evals" },
+            { from: "schedule", to: "nextCanary" },
+            { from: "schedule", to: "nextLatest" },
+            { from: "schedule", to: "gatsby" },
+            { from: "schedule", to: "turbo" },
+            { from: "dispatch", to: "releasePython" },
+            { from: "dispatch", to: "rollback" },
+            { from: "dispatch", to: "updateRemix" },
+            { from: "dispatch", to: "updateSandbox" },
+            { from: "dispatch", to: "evals" },
+            // CI Doctor triggered by tests (diagnostic)
+            { from: "test", to: "ciDoctor" },
+            // Release final summary
+            { from: "release", to: "summary" }
+        ];
+
+        // Color mapping for groups
+        const groupColors = {
+            trigger: { bg: "#eef2ff", border: "#334155", text: "#1e293b" },
+            release: { bg: "#d4f1f9", border: "#0077b6", text: "#0c4a6e" },
+            ci: { bg: "#ffe6e6", border: "#c2410c", text: "#7f1a1a" },
+            cron: { bg: "#e6f4ea", border: "#2e7d32", text: "#14532d" },
+            maintenance: { bg: "#fef9e3", border: "#b45309", text: "#78350f" },
+            other: { bg: "#f3e8ff", border: "#7c3aed", text: "#4c1d95" }
+        };
+
+        // Helper: draw rounded rectangle
+        function roundedRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            return this;
+        }
+
+        // Draw arrow between two nodes
+        function drawArrow(ctx, fromNode, toNode) {
+            const fromX = fromNode.x;
+            const fromY = fromNode.y;
+            const toX = toNode.x;
+            const toY = toNode.y;
+
+            // calculate direction and shorten line to node boundaries (approx radius 30)
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            const startX = fromX + Math.cos(angle) * 38;
+            const startY = fromY + Math.sin(angle) * 38;
+            const endX = toX - Math.cos(angle) * 38;
+            const endY = toY - Math.sin(angle) * 38;
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = "#5b6e8c";
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+
+            // draw arrowhead
+            const arrowSize = 8;
+            const arrowAngle = Math.atan2(toY - fromY, toX - fromX);
+            const arrowX = endX;
+            const arrowY = endY;
+            ctx.beginPath();
+            ctx.moveTo(arrowX, arrowY);
+            ctx.lineTo(arrowX - arrowSize * Math.cos(arrowAngle - Math.PI / 6), arrowY - arrowSize * Math.sin(arrowAngle - Math.PI / 6));
+            ctx.lineTo(arrowX - arrowSize * Math.cos(arrowAngle + Math.PI / 6), arrowY - arrowSize * Math.sin(arrowAngle + Math.PI / 6));
+            ctx.fillStyle = "#5b6e8c";
+            ctx.fill();
+        }
+
+        // Draw a single node with its label
+        function drawNode(ctx, node) {
+            const style = groupColors[node.group] || groupColors.other;
+            const w = 170;
+            const h = 58;
+            const x = node.x - w/2;
+            const y = node.y - h/2;
+
+            // shadow for depth
+            ctx.shadowColor = "rgba(0,0,0,0.08)";
+            ctx.shadowBlur = 4;
+            roundedRect(ctx, x, y, w, h, 14);
+            ctx.fillStyle = style.bg;
+            ctx.fill();
+            ctx.strokeStyle = style.border;
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+            ctx.shadowColor = "transparent";
+
+            // draw label (multi-line support)
+            ctx.font = "500 12px 'Segoe UI', 'Inter', system-ui";
+            ctx.fillStyle = style.text;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const lines = node.label.split('\n');
+            if (lines.length === 1) {
+                ctx.fillText(lines[0], node.x, node.y);
+            } else {
+                const lineHeight = 16;
+                const startY = node.y - ((lines.length-1) * lineHeight/2);
+                for (let i = 0; i < lines.length; i++) {
+                    ctx.fillText(lines[i], node.x, startY + i * lineHeight);
+                }
+            }
+        }
+
+        // metadata arrays for tooltips (hover detection)
+        let hoveredNode = null;
+
+        // check if mouse is over a node
+        function getNodeUnderMouse(mouseX, mouseY) {
+            for (let node of nodes) {
+                const w = 170;
+                const h = 58;
+                const left = node.x - w/2;
+                const right = node.x + w/2;
+                const top = node.y - h/2;
+                const bottom = node.y + h/2;
+                if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                    return node;
+                }
+            }
+            return null;
+        }
+
+        // draw tooltip if hovered
+        function drawTooltip(ctx, node, mouseX, mouseY) {
+            if (!node) return;
+            ctx.save();
+            ctx.font = "12px 'Segoe UI', monospace";
+            const description = getDescriptionForNode(node.id);
+            const tipWidth = 220;
+            const tipHeight = 36;
+            let tipX = mouseX + 15;
+            let tipY = mouseY - 25;
+            if (tipX + tipWidth > canvas.width) tipX = mouseX - tipWidth - 10;
+            if (tipY < 10) tipY = mouseY + 15;
+            
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#1e293b";
+            ctx.globalAlpha = 0.9;
+            roundedRect(ctx, tipX, tipY, tipWidth, tipHeight, 8);
+            ctx.fill();
+            ctx.fillStyle = "white";
+            ctx.font = "11px 'Segoe UI'";
+            ctx.textAlign = "left";
+            ctx.fillText(description, tipX + 10, tipY + 22);
+            ctx.globalAlpha = 1.0;
+            ctx.restore();
+        }
+
+        function getDescriptionForNode(id) {
+            const map = {
+                release: "Main release + changesets",
+                releaseCrates: "Publish Rust crates to crates.io",
+                releasePython: "PyPI trusted publishing",
+                rollback: "Rollback npm latest tag",
+                test: "Unit + E2E tests for PR",
+                lint: "Lint & changeset enforcement",
+                pythonTests: "Python multi-version pytest",
+                evals: "CLI evaluation tests",
+                nextCanary: "Update Next.js canary (every 10min)",
+                nextLatest: "Update Next.js latest (every 4h)",
+                gatsby: "Update Gatsby fixtures weekly",
+                turbo: "Update Turbo weekly",
+                agentics: "Close stale discussions/issues",
+                ciDoctor: "AI‑powered failure diagnosis",
+                discussions: "Close & lock discussions",
+                comment: "Post CLI tarball instructions",
+                prebuild: "Prebuild Next.js example",
+                updateRemix: "Update @remix-run/dev",
+                updateSandbox: "Update sandbox dependency",
+                summary: "Final release summary job"
+            };
+            return map[id] || "Workflow automation";
+        }
+
+        // main drawing routine
+        function drawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // draw edges first (so they are behind nodes)
+            for (let edge of edges) {
+                const fromNode = nodes.find(n => n.id === edge.from);
+                const toNode = nodes.find(n => n.id === edge.to);
+                if (fromNode && toNode) {
+                    drawArrow(ctx, fromNode, toNode);
+                }
+            }
+            
+            // draw nodes
+            for (let node of nodes) {
+                drawNode(ctx, node);
+            }
+            
+            // draw tooltip if needed
+            if (hoveredNode) {
+                drawTooltip(ctx, hoveredNode, mouseX, mouseY);
+            }
+        }
+
+        let mouseX = 0, mouseY = 0;
+        function onMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let canvasX = (e.clientX - rect.left) * scaleX;
+            let canvasY = (e.clientY - rect.top) * scaleY;
+            canvasX = Math.min(Math.max(0, canvasX), canvas.width);
+            canvasY = Math.min(Math.max(0, canvasY), canvas.height);
+            mouseX = canvasX;
+            mouseY = canvasY;
+            const node = getNodeUnderMouse(canvasX, canvasY);
+            if (node !== hoveredNode) {
+                hoveredNode = node;
+                drawCanvas();
+            } else if (node) {
+                drawCanvas();
+            } else {
+                // only redraw if hover goes away
+                if (hoveredNode !== null) {
+                    hoveredNode = null;
+                    drawCanvas();
+                }
+            }
+        }
+
+        function onMouseLeave() {
+            hoveredNode = null;
+            drawCanvas();
+        }
+
+        canvas.addEventListener('mousemove', onMouseMove);
+        canvas.addEventListener('mouseleave', onMouseLeave);
+        
+        // initial draw
+        drawCanvas();
+        
+        // window resize maintain aspect (canvas already fixed size, but we re-draw)
+        window.addEventListener('resize', () => drawCanvas());
+    })();
+</script>
+</body>
+</html>

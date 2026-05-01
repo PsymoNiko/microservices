@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Vercel Workflows – Full‑Page Graph</title>
+    <!-- Mermaid.js for diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #f0f2f5;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow-x: auto;
+        }
+
+        /* ----------------- GRAPH SECTION (full viewport) ----------------- */
+        .graph-fullpage {
+            min-height: 100vh;
+            width: 100%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02);
+            position: relative;
+            z-index: 2;
+        }
+
+        .graph-header {
+            text-align: center;
+            margin-bottom: 1rem;
+            width: 100%;
+        }
+
+        .graph-header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #0f172a, #1e40af);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.01em;
+        }
+
+        .graph-header p {
+            color: #334155;
+            max-width: 700px;
+            margin: 0.5rem auto 0;
+            font-size: 0.95rem;
+        }
+
+        .mermaid-wrapper {
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 32px;
+            padding: 1rem 0.5rem;
+            overflow-x: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            text-align: center;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 14px;
+        }
+
+        /* small legend inside graph area */
+        .inline-legend {
+            margin-top: 1.2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.25rem;
+            font-size: 0.75rem;
+            background: #f8fafc;
+            padding: 0.6rem 1.2rem;
+            border-radius: 60px;
+            backdrop-filter: blur(2px);
+        }
+        .inline-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+
+        /* scroll hint */
+        .scroll-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 5;
+        }
+        .scroll-hint i {
+            margin-right: 6px;
+        }
+
+        /* ----------------- DETAILS SECTION (below graph) ----------------- */
+        .details-container {
+            background: #f8fafc;
+            padding: 2rem 1.5rem 3rem;
+            border-top: 1px solid #e2e8f0;
+        }
+        .details-container h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #0f172a;
+        }
+        .workflow-table {
+            background: white;
+            border-radius: 28px;
+            overflow-x: auto;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            border: 1px solid #eef2f6;
+        }
+        .workflow-table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            min-width: 600px;
+        }
+        .workflow-table th {
+            background: #f1f5f9;
+            padding: 1rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .workflow-table td {
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid #ecf3f9;
+            vertical-align: top;
+        }
+        .workflow-name {
+            font-weight: 700;
+            font-family: monospace;
+            background: #eef2ff;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            display: inline-block;
+        }
+        .badge-trigger {
+            background: #e6f7e6;
+            color: #2b6e2f;
+            border-radius: 30px;
+            padding: 0.2rem 0.7rem;
+            font-size: 0.7rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .badge-cron {
+            background: #fff3e3;
+            color: #b45309;
+        }
+        .footer-note {
+            text-align: center;
+            font-size: 0.7rem;
+            color: #5b6e8c;
+            margin-top: 2rem;
+        }
+        @media (max-width: 780px) {
+            .graph-fullpage { padding: 1rem; min-height: 90vh; }
+            .graph-header h1 { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- FULL PAGE GRAPH SECTION (separate, dominant) -->
+<div class="graph-fullpage">
+    <div class="graph-header">
+        <h1><i class="fab fa-github"></i> Vercel · GitHub Actions</h1>
+        <p>Complete workflow graph — releases, CI, cron automation & maintenance</p>
+    </div>
+    <div class="mermaid-wrapper">
+        <div class="mermaid" id="full-graph">
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#2563eb', 'primaryTextColor': '#0f172a', 'primaryBorderColor': '#1e40af', 'lineColor': '#5b6e8c', 'secondaryColor': '#f8fafc', 'tertiaryColor': '#ffffff'}, 'flowchart': {'nodeSpacing': 60, 'rankSpacing': 70, 'curve': 'basis'}}}%%
+flowchart TD
+    subgraph Triggers [⚡ Core Triggers]
+        PushMain[push: main]
+        PR[pull_request → main]
+        Schedule[cron schedule]
+        Dispatch[workflow_dispatch]
+    end
+
+    subgraph ReleaseGroup [📦 Release & Publication]
+        Release[release.yml]
+        ReleaseCrates[release-crates.yml]
+        ReleasePython[release-python-package.yml]
+        Rollback[rollback-latest-tag.yml]
+    end
+
+    subgraph CIGroup [🧪 CI & Testing]
+        Tests[test.yml<br/>unit + e2e]
+        Lint[test-lint.yml]
+        PythonTests[test-python-packages.yml]
+        Evals[cli-evals.yml]
+    end
+
+    subgraph AutoGroup [🤖 Cron Automation]
+        NextCanary[cron-update-next-canary]
+        NextLatest[cron-update-next-latest]
+        Gatsby[cron-update-gatsby-fixtures]
+        Turbo[cron-update-turbo]
+    end
+
+    subgraph MaintainGroup [🛠️ Maintenance]
+        Agentics[agentics-maintenance]
+        CIDoctor[ci-doctor.lock]
+        Discussions[discussions-auto-close]
+    end
+
+    subgraph OtherGroup [➕ Other/Utility]
+        CommentTarball[comment-cli-tarball]
+        Prebuild[faster-template-prebuild]
+        UpdateRemix[update-remix-run-dev]
+        UpdateSandbox[update-sandbox]
+    end
+
+    %% triggers connections
+    PushMain --> Release
+    PushMain --> ReleaseCrates
+    PushMain --> Prebuild
+
+    PR --> Tests
+    PR --> Lint
+    PR --> PythonTests
+    PR --> Evals
+
+    Schedule --> NextCanary
+    Schedule --> NextLatest
+    Schedule --> Gatsby
+    Schedule --> Turbo
+
+    Dispatch --> ReleasePython
+    Dispatch --> Rollback
+    Dispatch --> UpdateRemix
+    Dispatch --> UpdateSandbox
+    Dispatch --> Evals
+
+    %% cross interactions
+    Tests --> |triggers diagnosis| CIDoctor
+    CIDoctor -.-> |creates issue| GitHubIssues[GitHub Issue]
+    Release --> summary[summary status]
+
+    %% styling groups
+    classDef release fill:#d4f1f9,stroke:#0077b6,stroke-width:2px,color:#0c4a6e;
+    classDef ci fill:#ffe6e6,stroke:#c2410c,stroke-width:2px,color:#7f1a1a;
+    classDef cron fill:#e6f4ea,stroke:#2e7d32,stroke-width:2px,color:#14532d;
+    classDef maint fill:#fef9e3,stroke:#b45309,stroke-width:2px,color:#78350f;
+    classDef other fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95;
+    classDef trigger fill:#eef2ff,stroke:#334155,stroke-width:2px,stroke-dasharray: 4 3;
+
+    class Release,ReleaseCrates,ReleasePython,Rollback release;
+    class Tests,Lint,PythonTests,Evals ci;
+    class NextCanary,NextLatest,Gatsby,Turbo cron;
+    class Agentics,CIDoctor,Discussions maint;
+    class CommentTarball,Prebuild,UpdateRemix,UpdateSandbox other;
+    class PushMain,PR,Schedule,Dispatch trigger;
+        </div>
+    </div>
+    <div class="inline-legend">
+        <span><div class="legend-dot" style="background:#d4f1f9; border:1px solid #0077b6;"></div> Release</span>
+        <span><div class="legend-dot" style="background:#ffe6e6; border:1px solid #c2410c;"></div> CI & Testing</span>
+        <span><div class="legend-dot" style="background:#e6f4ea; border:1px solid #2e7d32;"></div> Cron Automation</span>
+        <span><div class="legend-dot" style="background:#fef9e3; border:1px solid #b45309;"></div> Maintenance</span>
+        <span><div class="legend-dot" style="background:#f3e8ff; border:1px solid #7c3aed;"></div> Utility</span>
+        <span><i class="fas fa-arrow-right"></i> arrow = trigger</span>
+    </div>
+    <div class="scroll-hint">
+        <i class="fas fa-arrow-down"></i> Scroll for detailed workflow tables
+    </div>
+</div>
+
+<!-- DETAILED WORKFLOW TABLES (separate scrolling area) -->
+<div class="details-container">
+    <h2><i class="fas fa-table-list"></i> Complete workflow reference</h2>
+    
+    <!-- Release & publication -->
+    <div class="workflow-table">
+        <table>
+            <thead><tr><th width="20%">Workflow</th><th width="35%">Description</th><th width="20%">Triggers</th><th>Key steps</th></tr></thead>
+            <tbody>
+                <tr><td><span class="workflow-name">release.yml</span></td><td>Main npm release using changesets; creates version PR or publishes</td><td><span class="badge-trigger">push main</span></td><td>checkout, setup Node/Rust/Python, build, changesets action → publish or PR</td></tr>
+                <tr><td><span class="workflow-name">release-crates.yml</span></td><td>Publishes Rust crates to crates.io</td><td><span class="badge-trigger">push main (crates/vercel_runtime/**)</span></td><td>cargo publish</td></tr>
+                <tr><td><span class="workflow-name">release-python-package.yml</span></td><td>PyPI trusted publishing</td><td><span class="badge-trigger">workflow_dispatch</span></td><td>setup uv, publish.mjs</td></tr>
+                <tr><td><span class="workflow-name">rollback-latest-tag.yml</span></td><td>Rollbacks npm `latest` dist-tag</td><td><span class="badge-trigger">manual dispatch</span></td><td>validates version, npm dist-tag add</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- CI / Testing -->
+    <div class="workflow-table">
+        <table>
+            <thead><tr><th>Workflow</th><th>Description</th><th>Triggers</th><th>Key jobs</th></tr></thead>
+            <tbody>
+                <tr><td><span class="workflow-name">test.yml</span></td><td>Unit + E2E tests for PRs</td><td><span class="badge-trigger">pull_request main</span></td><td>determine affected packages → unitTests, e2eTests, summary</td></tr>
+                <tr><td><span class="workflow-name">test-lint.yml</span></td><td>Linting, changeset enforcement</td><td><span class="badge-trigger">pull_request</span></td><td>enforce-changeset, biome, syncpack, type-check</td></tr>
+                <tr><td><span class="workflow-name">test-python-packages.yml</span></td><td>Python multi-version tests</td><td><span class="badge-trigger">pull_request (python/**)</span></td><td>discover packages → pytest (3.12/3.13/3.14)</td></tr>
+                <tr><td><span class="workflow-name">cli-evals.yml</span></td><td>CLI evaluation tests (AI evals)</td><td><span class="badge-trigger">PR / weekly cron / dispatch</span></td><td>pnpm test:evals, upload results</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Cron automation -->
+    <div class="workflow-table">
+        <table>
+            <thead><tr><th>Workflow</th><th>Updates</th><th>Schedule</th><th>Script</th></tr></thead>
+            <tbody>
+                <tr><td><span class="workflow-name">cron-update-next-canary.yml</span></td><td>Next.js canary</td><td><span class="badge-trigger badge-cron">*/10 * * * *</span></td><td>utils/update-next.js canary</td></tr>
+                <tr><td><span class="workflow-name">cron-update-next-latest.yml</span></td><td>Next.js stable</td><td><span class="badge-trigger badge-cron">0 */4 * * *</span></td><td>utils/update-next.js latest</td></tr>
+                <tr><td><span class="workflow-name">cron-update-gatsby-fixtures.yml</span></td><td>Gatsby fixtures</td><td><span class="badge-trigger badge-cron">0 0 * * 0</span></td><td>update-gatsby-fixtures.js</td></tr>
+                <tr><td><span class="workflow-name">cron-update-turbo.yml</span></td><td>Turbo version</td><td><span class="badge-trigger badge-cron">0 0 * * 0</span></td><td>update-turbo.js</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Maintenance -->
+    <div class="workflow-table">
+        <table>
+            <thead><tr><th>Workflow</th><th>Purpose</th><th>Trigger</th><th>Action</th></tr></thead>
+            <tbody>
+                <tr><td><span class="workflow-name">agentics-maintenance.yml</span></td><td>Auto‑close stale discussions/issues/PRs</td><td><span class="badge-trigger">cron 37 */2 * * *</span></td><td>close expired entities via gh-aw</td></tr>
+                <tr><td><span class="workflow-name">ci-doctor.lock.yml</span></td><td>AI-powered CI failure diagnosis</td><td><span class="badge-trigger">on completion of E2E/Unit</span></td><td>analyze logs, create diagnostic issue</td></tr>
+                <tr><td><span class="workflow-name">discussions-auto-close.yml</span></td><td>Redirects GitHub discussions → community forum</td><td><span class="badge-trigger">discussion created</span></td><td>close & lock via GraphQL</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Other / utility -->
+    <div class="workflow-table">
+        <table>
+            <thead><tr><th>Workflow</th><th>Description</th><th>Trigger</th><th>Key behavior</th></tr></thead>
+            <tbody>
+                <tr><td><span class="workflow-name">comment-cli-tarball.yml</span></td><td>Comment CLI tarball testing instructions</td><td><span class="badge-trigger">repository_dispatch</span></td><td>posts npx command on PR</td></tr>
+                <tr><td><span class="workflow-name">faster-template-prebuild-nextjs.yml</span></td><td>Pre‑build Next.js example & deploy</td><td><span class="badge-trigger">push main / dispatch</span></td><td>vercel build + deploy --prebuilt</td></tr>
+                <tr><td><span class="workflow-name">update-remix-run-dev.yml</span></td><td>Update @remix-run/dev inside remix-builder</td><td><span class="badge-trigger">workflow_dispatch</span></td><td>create PR with updated dependency</td></tr>
+                <tr><td><span class="workflow-name">update-sandbox.yml</span></td><td>Update sandbox dep in packages/cli</td><td><span class="badge-trigger">workflow_dispatch</span></td><td>version check, changeset, auto PR</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="footer-note">
+        <i class="fas fa-diagram-project"></i> Graph displays all vercel/vercel workflows with triggers and relationships. Detailed tables below for reference.
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            background: '#ffffff',
+            primaryColor: '#2563eb',
+            primaryBorderColor: '#1e3a8a',
+            primaryTextColor: '#0f172a',
+            lineColor: '#5b6e8c',
+            secondaryColor: '#f1f5f9',
+            tertiaryColor: '#ffffff',
+            fontSize: '14px',
+        },
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis', rankSpacing: 80, nodeSpacing: 70 },
+        securityLevel: 'loose',
+    });
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            if (typeof mermaid !== 'undefined') mermaid.contentLoaded();
+        }, 80);
+    });
+</script>
+</body>
+</html>
